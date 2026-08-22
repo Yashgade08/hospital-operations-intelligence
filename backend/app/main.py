@@ -13,7 +13,7 @@ from app.core.security import create_access_token, decode_token, hash_password, 
 from app.database.database import Base, engine, get_db
 from app.database.init_db import seed
 from app.models.models import Appointment, Department, Doctor, Medicine, Notification, Patient, User, Ward
-from app.schemas.schemas import AppointmentCreate, LoginRequest, PatientCreate, ProfileUpdate, RegisterRequest
+from app.schemas.schemas import AppointmentCreate, LoginRequest, PatientCreate, ProfileUpdate, RegisterRequest, WardUpdate
 
 app = FastAPI(title=settings.app_name, version="1.0.0", description="Operational decision-support for modern hospital teams.")
 app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -92,6 +92,24 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(current_user)) ->
     occupied_beds = db.scalar(select(func.sum(Ward.occupied_beds))) or 0
     appointments = db.scalars(select(Appointment).where(Appointment.appointment_date == today)).all()
     return {"kpis": {"patients": db.scalar(select(func.count(Patient.id))) or 0, "today_appointments": len(appointments), "occupancy": round(occupied_beds / total_beds * 100) if total_beds else 0, "available_beds": total_beds - occupied_beds, "revenue": 18420, "pending_bills": 27}, "appointment_status": [{"name": status, "value": sum(1 for item in appointments if item.status == status)} for status in ["CONFIRMED", "SCHEDULED", "COMPLETED", "NO_SHOW"]], "occupancy": [{"name": ward.name, "occupied": ward.occupied_beds, "total": ward.total_beds} for ward in db.scalars(select(Ward)).all()], "notifications": [{"id": item.id, "title": item.title, "description": item.description, "severity": item.severity, "read": bool(item.read)} for item in db.scalars(select(Notification).order_by(Notification.created_at.desc())).all()]}
+
+
+@app.get("/api/wards")
+def wards(db: Session = Depends(get_db), _: User = Depends(current_user)) -> list[dict]:
+    return [{"id": ward.id, "name": ward.name, "total_beds": ward.total_beds, "occupied_beds": ward.occupied_beds, "available_beds": ward.total_beds - ward.occupied_beds} for ward in db.scalars(select(Ward).order_by(Ward.name)).all()]
+
+
+@app.patch("/api/wards/{ward_id}")
+def update_ward(ward_id: int, payload: WardUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN"))) -> dict:
+    if payload.occupied_beds > payload.total_beds:
+        raise HTTPException(status_code=422, detail="Occupied beds cannot exceed total beds")
+    ward = db.get(Ward, ward_id)
+    if not ward:
+        raise HTTPException(status_code=404, detail="Ward not found")
+    ward.total_beds = payload.total_beds
+    ward.occupied_beds = payload.occupied_beds
+    db.commit()
+    return {"id": ward.id, "name": ward.name, "total_beds": ward.total_beds, "occupied_beds": ward.occupied_beds, "available_beds": ward.total_beds - ward.occupied_beds}
 
 
 @app.get("/api/patients")

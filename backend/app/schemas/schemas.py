@@ -20,6 +20,11 @@ class ProfileUpdate(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
 
 
+class WardUpdate(BaseModel):
+    total_beds: int = Field(ge=1, le=5000)
+    occupied_beds: int = Field(ge=0, le=5000)
+
+
 class PatientCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     date_of_birth: date
