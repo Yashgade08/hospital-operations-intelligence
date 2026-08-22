@@ -1,0 +1,17 @@
+# secrets and environments
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db
+
+# frontend
+node_modules/
+dist/
+
+# tooling
+.vscode/
+.idea/
+*.log
+.DS_Store
